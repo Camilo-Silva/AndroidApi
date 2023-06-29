@@ -5,34 +5,88 @@ import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.view.View
 import android.view.inputmethod.InputMethodManager
-import android.widget.SearchView
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
+import android.widget.Spinner
 import android.widget.Toast
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.internal.ViewUtils.hideKeyboard
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
-class MainActivity : AppCompatActivity(), SearchView.OnQueryTextListener {
+class MainActivity : AppCompatActivity() {
     private lateinit var recyclerView: RecyclerView
     private lateinit var adapter: BreedsAdapter
-    private var imagesByBreedList = mutableListOf<String>()
-    private lateinit var searchView: SearchView
+    private var imagesList = mutableListOf<String>()
+    private var breedsList = mutableListOf<String>()
+
+//    private lateinit var searchView: SearchView
+    private lateinit var spinner: Spinner
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         recyclerView = findViewById(R.id.recycler)
-        searchView = findViewById(R.id.searchview)
-        searchView.setOnQueryTextListener(this)
+        spinner = findViewById(R.id.spinner)
+//        searchView = findViewById(R.id.searchview)
+
+//        searchView.setOnQueryTextListener(this)
+
 
         recyclerView.layoutManager = LinearLayoutManager(this)
-        adapter = BreedsAdapter(imagesByBreedList)
+        adapter = BreedsAdapter(imagesList)
         recyclerView.adapter = adapter
+
+        getListOfBreeds()
+    }
+
+    private fun getListOfBreeds() {
+        CoroutineScope(Dispatchers.IO).launch {
+            val call = getRetrofit().create(ApiService::class.java).getBreedsList("breeds/list/all")
+            val response: Breeds? = call.body()
+
+            runOnUiThread {
+                if (call.isSuccessful) {
+
+                    val breedsMap = response?.breed
+                    if (breedsMap!= null) {
+                        for (breed in breedsMap.keys) {
+                            breedsList.add(breed)
+
+                        }
+                        setSpinner()
+                    }else {
+                        showError()
+                    }
+                }
+            }
+
+        }
+    }
+
+    private fun setSpinner() {
+        val spinnerAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, breedsList)
+        spinner.adapter = spinnerAdapter
+
+        spinner.onItemSelectedListener = object  : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(
+                parent: AdapterView<*>?,
+                view: View?,
+                position: Int,
+                id: Long
+            ) {
+                getImagesBy(breedsList[position])
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {
+
+            }
+
+        }
     }
 
     private fun getImagesBy(breed: String?) {
@@ -46,8 +100,8 @@ class MainActivity : AppCompatActivity(), SearchView.OnQueryTextListener {
             runOnUiThread {
                 if (call.isSuccessful) {
                     val images = response?.images ?: emptyList()
-                    imagesByBreedList.clear()
-                    imagesByBreedList.addAll(images)
+                    imagesList.clear()
+                    imagesList.addAll(images)
                     adapter.notifyDataSetChanged()
                 } else {
                     showError()
@@ -68,7 +122,7 @@ class MainActivity : AppCompatActivity(), SearchView.OnQueryTextListener {
     }
 
     private fun showError() {
-        Toast.makeText(this, "fallo en la llamada", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Error al recuperar el listado de razas", Toast.LENGTH_SHORT).show()
     }
 
     private fun getRetrofit(): Retrofit {
@@ -78,14 +132,5 @@ class MainActivity : AppCompatActivity(), SearchView.OnQueryTextListener {
             .build()
     }
 
-    override fun onQueryTextSubmit(breed: String?): Boolean {
-        if (!breed.isNullOrBlank()) {
-            getImagesBy(breed)
-        }
-        return true
-    }
 
-    override fun onQueryTextChange(newText: String?): Boolean {
-        return false
-    }
 }
